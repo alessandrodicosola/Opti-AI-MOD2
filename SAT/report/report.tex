@@ -1,0 +1,49 @@
+\documentclass{report}
+
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{graphicx,wrapfig}
+\usepackage{subcaption}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+
+\date{}
+\geometry{top=1cm}
+\begin{document}
+\begin{titlepage}
+    \vspace*{1cm}
+
+    \begin{center}
+        \Huge{Alma Mater Studiorum 
+        
+        University of Bologna }
+    \end{center}
+
+    \vspace*{5 cm}
+    \begin{center}
+        \LARGE{Combinatorial Decision Making and Optimization}
+
+        \Large Report SAT Model
+
+        \large {Dicosola Alessandro [Matr. 935563]}
+    \end{center}
+\end{titlepage}
+
+\section*{Model}
+NOTE.I'm including this model althought isn't able to handle many solutions (can handle up to 17x17) so probably will not be considered during your evaluation.
+%
+\newline
+%
+The model create a "plane" ( of dimension WxH ) boolean variables for each rectnagle in the instance.
+Given a rectangle of dimension $wxh$ if a position $(x,y)$ is TRUE then also all the others $(x+w,y+h)$ are TRUE.
+\newline
+The model use \textit{AtMost} for enforcing that for each position $(x,y)$ in each "plane" there is only one TRUE value.
+\newline
+
+\end{document}
+
+
+

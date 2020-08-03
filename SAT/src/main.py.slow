@@ -1,0 +1,107 @@
+import argparse
+import sys
+from pathlib import Path
+
+from z3 import *
+
+parser = argparse.ArgumentParser(description="Minizinc solver in python")
+parser.add_argument("--instance",help="ABSOLUTE PATH of the instance file",default="")
+
+args = parser.parse_args();
+
+## Read the instance file
+W = 0
+H = 0
+N = 0
+widths = []
+heights = []
+
+if len(args.instance) > 0:
+    with open(args.instance) as instances_file:
+        for index,line in enumerate(instances_file):
+            if ((line.strip())):    
+                line = line.strip()
+                if index == 0:
+                    W = int(line.split()[0])
+                    H = int(line.split()[1])
+                elif index == 1:
+                    N = int(line)
+                else:
+                    s = line.split()
+                    widths.append(int(s[0]))
+                    heights.append(int(s[1]))
+else:
+     #test constants
+    W = 5
+    H = 4
+    N = 4
+    widths = [4,3,2,1]
+    heights = [2,2,2,2]
+    N = len(widths)
+
+
+
+PLANES_RANGE = range(N)
+WIDTH_RANGE  = range(W)
+HEIGHT_RANGE = range(H)
+
+PLANES = [ [ [ Bool(f"p_{p}_{r}_{c}") for c in WIDTH_RANGE ] for r in HEIGHT_RANGE ] for p in PLANES_RANGE ]
+
+INIT_list = list()
+for n in PLANES_RANGE:
+    (w,h) = (widths[n],heights[n])
+    (max_w,max_h) = (W-w,H-h)
+    
+    MAX_W_RANGE = range(0,max_w+1)
+    MAX_H_RANGE = range(0,max_h+1)
+    
+    or_list = list()    
+    for row in MAX_H_RANGE:
+        for col in MAX_W_RANGE:
+            pos = PLANES[n][row][col]
+            others = [ Not(PLANES[p][row+r][col+c]) for p in PLANES_RANGE if p!=n for r in range(0,h) for c in range(0,w) ]
+            and1 = And(pos,*others)
+            or_list.append(and1)
+    or1 = Or(or_list)
+    INIT_list.append(or1)
+INIT = And(INIT_list)
+
+NO_OVERLAP_POS_list = list()
+for row in HEIGHT_RANGE:
+    for col in WIDTH_RANGE:
+        atmost1 = AtMost(*[PLANES[p][row][col] for p in PLANES_RANGE],1)
+        NO_OVERLAP_POS_list.append(atmost1)
+NO_OVERLAP_POS = And(NO_OVERLAP_POS_list)
+
+ONLY_ONE_per_PLANE_list = list();
+for p in PLANES_RANGE:
+    atmost1 = AtMost(*[PLANES[p][row][col] for row in HEIGHT_RANGE for col in WIDTH_RANGE],1)
+    ONLY_ONE_per_PLANE_list.append(atmost1)
+ONLY_ONE_per_PLANE = And(ONLY_ONE_per_PLANE_list)
+
+set_option("sat.phase","always_false")
+
+solver = With("sat").solver()
+solver.append(INIT,NO_OVERLAP_POS,ONLY_ONE_per_PLANE)
+
+
+def print_solution(model):
+    only_true = [ PLANES[p][row][col] for p in PLANES_RANGE for row in HEIGHT_RANGE for col in WIDTH_RANGE if model[PLANES[p][row][col]] == True ]
+    print(f"{W} {H}")
+    print(f"{N}")
+    for pos in only_true:
+        name = str(pos)
+        print(parse_pos(pos))  
+
+def parse_pos(pos):
+    info = str(pos).split("_")
+    plane = int(info[1])
+    row     = info[2]
+    col     = info[3]
+    w     = widths[plane]
+    h     = heights[plane]
+    return f"{w} {h} {col} {row}"
+
+print_solution(solver.model()) if solver.check() == sat else "unsat"
+
+

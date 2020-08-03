@@ -1,0 +1,112 @@
+import argparse
+import sys
+from pathlib import Path
+
+from z3 import *
+
+parser = argparse.ArgumentParser(description="Minizinc solver in python")
+parser.add_argument("--instance",help="ABSOLUTE PATH of the instance file",default="")
+parser.add_argument("--out_dir", help="ABSOLUTE DIR for output file",default="")
+
+args = parser.parse_args();
+
+## Read the instance file
+W = 0
+H = 0
+N = 0
+widths = []
+heights = []
+
+if len(args.instance) > 0:
+    with open(args.instance) as instances_file:
+        for index,line in enumerate(instances_file):
+            if ((line.strip())):    
+                line = line.strip()
+                if index == 0:
+                    W = int(line.split()[0])
+                    H = int(line.split()[1])
+                elif index == 1:
+                    N = int(line)
+                else:
+                    s = line.split()
+                    widths.append(int(s[0]))
+                    heights.append(int(s[1]))
+else:
+     #test constants
+    W = 5
+    H = 4
+    N = 4
+    widths = [4,3,2,1]
+    heights = [2,2,2,2]
+    N = len(widths)
+  
+
+
+
+PLANES_RANGE = range(N)
+WIDTH_RANGE  = range(W)
+HEIGHT_RANGE = range(H)
+
+PLANES = [ [ [ Bool(f"p_{p}_{r}_{c}") for c in WIDTH_RANGE ] for r in HEIGHT_RANGE ] for p in PLANES_RANGE ]
+
+INIT_list = list()
+for n in PLANES_RANGE:
+    (w,h) = (widths[n],heights[n])
+    (max_w,max_h) = (W-w,H-h)
+    
+    MAX_W_RANGE = range(0,max_w+1)
+    MAX_H_RANGE = range(0,max_h+1)
+    
+    or_list = list()    
+    for row in MAX_H_RANGE:
+        for col in MAX_W_RANGE:
+            pos = PLANES[n][row][col]
+            others = [ PLANES[n][row+r][col+c] for r in range(0,h) for c in range(0,w) if row+r!=row or col+c!=col ]
+            and1 = And(pos,*others)
+            or_list.append(and1)
+    or1 = Or(or_list)
+    INIT_list.append(or1)
+INIT = And(INIT_list)
+
+NO_OVERLAP_POS_list = list()
+for row in HEIGHT_RANGE:
+    for col in WIDTH_RANGE:
+        atmost1 = AtMost(*[PLANES[p][row][col] for p in PLANES_RANGE],1)
+        NO_OVERLAP_POS_list.append(atmost1)
+NO_OVERLAP_POS = And(NO_OVERLAP_POS_list)
+
+
+solver = Solver()
+solver.append(INIT,NO_OVERLAP_POS)
+
+
+def print_solution(model):
+    from itertools import groupby
+    l = [ str(PLANES[p][row][col]) for p in PLANES_RANGE for row in HEIGHT_RANGE for col in WIDTH_RANGE if model[PLANES[p][row][col]] == True ]
+    # group by 2 char which is the index of the plane and get the first element which is the bottom left position
+    firsts = [ list(group)[0] for key,group in groupby(l,lambda pos: pos[2] ) ]
+
+    data = []
+    print(f"{W} {H}")
+    print(f"{N}")
+    for pos in firsts:
+        s = pos.split("_")
+        p = int(s[1])
+        y = s[2]
+        x = s[3]
+        w = widths[p]
+        h = heights[p]
+        print(f"{w} {h} {x} {y}")
+        data.append(f"{w} {h} {x} {y}")
+
+    if len(args.out_dir)>0:
+        out_name = f"{W}x{H}-out.txt"
+        out_path = Path(args.out_dir) / out_name
+        with open(out_path,'w') as out_file:
+            out_file.writelines([\
+                f"{W} {H}\n",
+                f"{N}\n",
+                "\n".join(data)
+                ])
+
+print_solution(solver.model()) if solver.check() == sat else "unsat"

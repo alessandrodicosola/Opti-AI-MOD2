@@ -1,0 +1,79 @@
+\documentclass{report}
+
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{graphicx,wrapfig}
+\usepackage{subcaption}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+
+\date{}
+\geometry{top=1cm}
+\begin{document}
+\begin{titlepage}
+    \vspace*{1cm}
+
+    \begin{center}
+        \Huge{Alma Mater Studiorum 
+        
+        University of Bologna }
+    \end{center}
+
+    \vspace*{5 cm}
+    \begin{center}
+        \LARGE{Combinatorial Decision Making and Optimization}
+
+        \Large Report SMT Model
+
+        \large {Dicosola Alessandro [Matr. 935563]}
+    \end{center}
+\end{titlepage}
+
+\section*{Model}
+The model use the same encoding as CP: X and Y as decision variables.
+In order to take into account the rotation also $Wi$ and $Hi$ are used for constraning the width and height of each rectangle:
+\begin{lstlisting}[basicstyle=\footnotesize]
+    X = IntVector("x",N)
+    Y = IntVector("y",N)
+    Wi = IntVector("w",N)
+    Hi = IntVector("h",N)
+\end{lstlisting} 
+%
+The constraints used are:
+\begin{itemize}
+    \item Initialize $w_i$,$h_i$ for each rectangle
+    
+    \begin{math}
+        \bigwedge_{i = 1}^{N}  w_i = W_i \wedge  h_i = H_i \vee h_i = W_i \wedge w_i = H_i 
+    \end{math}
+    \item X and Y should be bounded within the "available" area given their size
+    
+    \begin{math}
+        \bigwedge_{i = 1}^{N}  x_i >= 0 \wedge  x_i <= W - w_i \wedge y_i >= 0 \wedge y_i <= H - h_i 
+    \end{math}
+    
+    \item No overlapping constraint:
+
+    Two rectangles $i$ ad $j$ overlap if:
+    %
+    \begin{math}
+        x_i+w_i>x_j \wedge x_i<x_j+w_j \wedge y_i+h_i>y_j \wedge y_i<y_j+h_j     
+    \end{math}
+    %
+    thus negating it we have the no-overlap constraint:
+
+    \begin{math}
+        \bigwedge_{i = 1}^{N} x_i+w_i \leq x_j \vee x_j+w_j \leq x_i \vee y_i+h_i \leq y_j \vee y_j+h_j \leq y_i
+    \end{math}
+    \item In case of rectangles with same size I' ve created the \textbf{lex\_lesseq} constraint decomposing it.
+    \item The implicit constraint: given a vertical (resp. horizontal) line the sum of each vertical (resp. horizontal) edge is H (resp. W).
+\end{itemize}
+%
+Both \textbf{rotation} and \textbf{rectangles with same size} are handled althought for the latter case when there aren't rectangles with same size \textit{unsat} is returned thus this constraint is activated only manually by command line.
+\end{document}
+
+
+

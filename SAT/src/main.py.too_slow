@@ -1,0 +1,97 @@
+import argparse
+import sys
+from pathlib import Path
+
+from z3 import *
+
+parser = argparse.ArgumentParser(description="Minizinc solver in python")
+parser.add_argument("--instance",help="ABSOLUTE PATH of the instance file",default="")
+
+args = parser.parse_args();
+
+## Read the instance file
+W = 0
+H = 0
+N = 0
+widths = []
+heights = []
+
+if len(args.instance) > 0:
+    with open(args.instance) as instances_file:
+        for index,line in enumerate(instances_file):
+            if ((line.strip())):    
+                line = line.strip()
+                if index == 0:
+                    W = int(line.split()[0])
+                    H = int(line.split()[1])
+                elif index == 1:
+                    N = int(line)
+                else:
+                    s = line.split()
+                    widths.append(int(s[0]))
+                    heights.append(int(s[1]))
+else:
+     #test constants
+    W = 5
+    H = 4
+    N = 4
+    widths = [3,2,4,1]
+    heights = [2,2,2,2]
+
+solver = Solver();
+
+
+
+PLANES_RANGE = range(N)
+WIDTH_RANGE  = range(W)
+HEIGHT_RANGE = range(H)
+
+
+# Init booleans
+PLANES =[ [ [ Bool(f"p_{p}_{r}_{c}") for c in WIDTH_RANGE ] for r in HEIGHT_RANGE ] for p in PLANES_RANGE ]
+
+# Each plane contains wxh TRUE boolean
+for p in PLANES_RANGE:
+    w = widths[p]
+    h = heights[p]
+    max_w = W-w
+    max_h = H-h
+    
+    #or_for_p = Or([And([Implies(PLANES[p][x+r][y],And([PLANES[p][x+r][y+j] for j in range(w)])) for r in range(h) ]) for y in range(0,max_w+1) for x in range(0,max_h+1)])
+    or_list = list()
+    for r1 in range(0,max_h+1):
+        for c1 in range(0,max_w+1):
+            list_and = list()
+            for r2 in HEIGHT_RANGE:
+                for c2 in WIDTH_RANGE:
+                    valid_r2 = r2 >= r1 and r2 < r1+h
+                    valid_c2 = c2 >= c1 and c2 < c1+w
+                    if valid_r2 and valid_c2:
+                        list_and.append(PLANES[p][r2][c2])
+                    else: list_and.append(Not(PLANES[p][r2][c2]))
+            and1 = And(list_and)
+            or_list.append(and1)
+    or1 = Or(or_list)
+    solver.add(or1)
+
+
+# At most one true value on (x,y) among all planes
+AT_MOST_ONE_TRUE = [ And([ Or(Not(PLANES[p][x][y]),Not(PLANES[q][x][y])) for p in PLANES_RANGE for q in range(p+1,N) ])  for x in HEIGHT_RANGE for y in WIDTH_RANGE ]
+
+for clause in AT_MOST_ONE_TRUE:
+    solver.add(clause)
+
+def print_p(model,p):
+    print("\n".join("\t".join("X" if True==model.evaluate(PLANES[p][x][y]) else "O" for y in WIDTH_RANGE) for  x in HEIGHT_RANGE))
+
+def print_all(model):
+    for p in PLANES_RANGE:
+        print(f"Rectangle {widths[p]}x{heights[p]}")
+        print_p(model,p)
+        print("\n")
+
+if solver.check():
+    print_all(solver.model());
+else:
+    print("unsat")
+

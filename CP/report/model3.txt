@@ -1,0 +1,79 @@
+include "globals.mzn";
+
+
+
+% Constants
+%% Total width
+int: W;
+set of int: WIDTH = 1..W;
+%% Total height
+int: H;
+set of int: HEIGHT = 1..H;
+%% Amount of presents
+int: N;
+set of int: Presents = 1..N;
+%% Array of width of each present
+array[Presents] of WIDTH: widths;
+%% Array of heights of each present
+array[Presents] of HEIGHT: heights;
+%% Upper bound for width and height of each present
+array[Presents] of 1..W*H: areas = [ widths[i]*heights[i] | i in Presents ];
+int: index_max = arg_max(areas);
+array[Presents] of 0..W-1: W_UB = [ W - widths[i]  | i in Presents ];
+array[Presents] of 0..H-1: H_UB = [ H - heights[i] | i in Presents ];
+
+% Set constant for testing
+% N=4;
+% W=4;
+% H=2;
+% widths = [1,1,1,2];
+% heights = [1,1,2,2];
+N=6;
+W=7;
+H=4;
+widths = [2,2,2,2,2,1];
+heights = [4,2,2,2,2,4];
+
+
+%Decision variable
+%% Array of starting position X and Y to be found
+array[Presents] of var 0..W-1: X;
+array[Presents] of var 0..H-1: Y;
+
+% Constraints
+% predicate largest_rect_cover_H_or_is_largest_H() = let {int: h = heights[index_max]; int: min_h = min(heights) } in h==H \/ H-h>=min_h;
+% constraint if largest_rect_cover_H_or_is_largest_H() then X[index_max] = W - widths[index_max] /\ Y[index_max]=0 endif;
+
+%% Boundaries 
+constraint forall(p in Presents)(X[p] <= W_UB[p] /\ Y[p] <= H_UB[p])::domain;
+
+
+%% Impose ordering
+predicate same_size(int:p,int:q) = widths[p] == widths[q] /\ heights[p] == heights[q];
+
+constraint forall(p in Presents)( let {array[int] of int: Q = [q | q in Presents where same_size(p,q)] } in 
+  forall(i in index_set(Q) where i > 1)(lex_less([X[i-1],Y[i-1]],[X[i],Y[i]])));
+ 
+
+
+%% No overlapping between rectangles
+constraint diffn(X,Y,widths,heights);
+  
+%% Implicit constraint
+constraint cumulative(X,widths,heights,H);
+constraint cumulative(Y,heights,widths,W);
+
+
+constraint forall(x in 0..W-1 where count(X,x)>0)(sum(p in Presents where X[p] <= x /\ X[p]+widths[p]>x)(heights[p])=H);
+% Inserting the constraint below does not allow to have a gain in performance
+% constraint forall(y in 0..H-1 where count(Y,y)>0)(sum(p in Presents where Y[p] <= y /\ Y[p]+heights[p]>y)(widths[p])=W);
+
+
+% ============================================================================================
+solve ::seq_search([int_search(X,smallest,indomain_min),int_search(Y,input_order,indomain)]) satisfy;
+% ============================================================================================
+
+% output ["\(W) \(H)\n","\(N)\n"];
+% output ["\(widths[i]) \(heights[i]) \(X[i]) \(Y[i])\n" | i in 1..N];
+% output [show(X) ++ "\n" ++ show(Y) ++ "\n" ++ show(widths) ++ "\n" ++ show(heights) ++ "\n" ++ show(areas)];
+output [ "X:" ++ show(X) ++ " Y:" ++ show(Y) ++ "\n" ];

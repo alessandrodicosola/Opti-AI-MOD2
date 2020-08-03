@@ -1,0 +1,275 @@
+\documentclass{report}
+
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{graphicx,wrapfig}
+\usepackage{subcaption}
+\usepackage{siunitx}
+
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{textcomp}
+
+\date{}
+\geometry{top=1cm}
+\begin{document}
+\begin{titlepage}
+    \vspace*{1cm}
+
+    \begin{center}
+        \Huge{Alma Mater Studiorum 
+        
+        University of Bologna }
+    \end{center}
+
+    \vspace*{5 cm}
+    \begin{center}
+        \LARGE{Combinatorial Decision Making and Optimization}
+
+        \Large Report CP Model
+
+        \large {Dicosola Alessandro [Matr. 935563]}
+    \end{center}
+\end{titlepage}
+
+
+\section*{Base model}
+\begin{flushleft}
+    
+The problem is encoded using as decision variables X and Y that are the bottom left coordinates of each rectangle thus 
+$X[i]$ and $Y[i]$ represents the $x$ and $y$ of the i-th rectangle (called Present inside the model). \newline
+
+The constraints used are the following:
+
+\begin{enumerate}
+    \item X and Y should be bounded inside the "available" area for them: $0<x_i<W- w_i$ and $0<y_i<H- h_i$ where W,H are the total width and height of the whole area and $w_i$ and $h_i$ are the width and height of the considered rectangle.
+    \item No rectangle has to overlap using \textbf{diffn}
+    \item The sum of the width (resp. height) of each rectangle within the same x (resp. y) has to be equal to H (resp. W) ( although only the one that constraint X is used).
+    %
+    At the beginning I wrote 
+    \small
+    \begin{lstlisting}
+        constraint forall(x in 0..W-1 where count(X,x)>0)
+            (sum(p in Presents where X[p] = x)
+                (heights[p])=H);        
+    \end{lstlisting}
+    which results to UNSATISFIABLE for some instances since we can see that misses some point (for $x=9$ the sum doesn't consider the point $(6,0)$) ; instead this works well
+    \small
+    \begin{lstlisting}
+        constraint forall(x in 0..W-1 where count(X,x)>0)
+            (sum(p in Presents where X[p] <= x /\ X[p]+widths[p]>x)
+                (heights[p])=H);
+    \end{lstlisting}
+    \begin{center}
+        \includegraphics[scale=0.4]{13x13-out.png}.        
+    \end{center}
+    %
+    \item In order to reduce the search space:\begin{itemize}
+        \item The $x$ and $y$ of the largest rectangle are forced at the beginning since it's the most difficut because can be inserted in few position instead a small rectngle it's esier and as consequence the domain of X is reduced.
+        \item A redundant global constraint is used: \textbf{comulative}. We can see:\begin{itemize}
+            \item the starting point as the coordinate x or y
+            \item the duration as the width or height
+            \item the resource requirements as height or width
+            \item the resource bound as H or W
+        \end{itemize}
+        thus at each x (resp. y) of a rectangle the height (resp. width) should not exced the H (resp. W).
+        \newline
+        NOTE. This was possibile thanks to \url{https://sofdem.github.io/gccat/gccat/Ccumulative.html} which allow me to see this possibility.
+        \item Avoid symmetries.
+        
+        NOTE. The symmetries are permutation of the solution but in this case the symmetric solutions have different values thus I'm not sure that this constraints are good
+        \begin{itemize}
+            \item Flip over y.
+            Assuming that we have the following configuration (blue and orange rectnagle).
+            It's possibile to see that $-(x+width) + W$ gives the new point: in this case $-(0+3)+5=2$ (the red point) 
+    
+            \item  Flip over x.
+            The same but $-(y+height)+H$
+            \begin{figure}
+                \centering
+                \includegraphics{symy.png}
+                \caption*{Flip over y}
+            \end{figure}
+
+            \item Rotation. I have applied the \textit{rotation matrix} to the point which will be the new bottom-left point after the translation around the center:
+            \begin{math}
+                \begin{array}{lcl}
+                    X-C_x=(X-C_x)cos(\theta)-(Y-C_y)sin(\theta) \\
+                    Y-C_y=(X-C_y)sin(\theta)-(Y-C_y)cos(\theta)
+                \end{array}
+            \end{math}
+
+            For instance in the model I have applied only a \ang{90} rotation (towards left) to the top-left point (which is the bottom-left after the rotation) since I'm not sure about the correctness (for the problem presented at the beginning about the symmetries ).
+
+            But the same logic should be applied to the other rotations.
+
+            The following results were found:
+            \begin{tabular}{|l|l|l|l|}
+            Instance & No symmetries breaking & +Flip over $x$ and over $y$ & +Rotation \\
+            $13 \times 13$ & 220 & 50 & 18 \\
+            $15 \times 15$ & 2688 & 944 & 456
+        \end{tabular}
+
+        \end{itemize}    
+    \end{itemize} 
+\end{enumerate}
+
+\section*{Solver}
+The solver used is \textbf{Chuffed} since allow the satisfability of harder problem than \textit{Gecode} (probably caused by the fact of weak symmetries breaking constraint).
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+    Instance & Gecode (6 Threads) & Chuffed        \\ \hline
+    40x40    & 189ms              & 885ms          \\ \hline
+    39x39    &                    & 1s 372ms          \\ \hline
+    37x37    &                    & 2m 36s         \\ \hline
+    27x27    & 46s 261ms          & 101ms          \\ \hline
+\end{tabular}
+\end{table}
+
+\textit{Chuffed} solver has a strategy called \textbf{priority\_search} \footnote{\url{https://www.minizinc.org/doc-2.4.3/en/lib-chuffed.html\#functions-and-predicates}} which allow to select a strategy among many based on the delgate x and the strategy select and explore.
+
+\begin{lstlisting}[basicstyle=\footnotesize]
+    annotation priority_search(array [int] of var int: x,
+                           array [int] of ann: search,
+                           ann: select,
+                           ann: explore)
+\end{lstlisting} 
+Using it in this way:
+\begin{flushleft}  
+\small
+\begin{lstlisting}[basicstyle=\footnotesize]
+    include "chuffed.mzn";
+    solve ::seq_search([
+              priority_search(areas,
+                        [int_search([X[p]],smallest,indomain_min) | p in Presents],
+                        largest,indomain_max),
+              int_search(Y,largest,indomain_max)
+              ]) satisfy;                   
+\end{lstlisting}
+\end{flushleft}
+
+we associate each variable with its area and then we select the variable 
+with the greatest area and assign to it the smallest value for X and largest for Y.\newline
+
+This behaviour can be see graphically:
+
+\begin{figure}[h]
+    \centering
+    \begin{subfigure}[b]{0.6\textwidth}
+        \includegraphics[scale=0.3]{40x40-gecode}
+        \caption{40x40 using Gecode and seq\_search}
+    \end{subfigure}%
+    \begin{subfigure}[b]{0.6\textwidth}
+        \includegraphics[scale=0.3]{40x40-chuffed}
+        \caption{40x40 using Chuffed and priority\_search}
+    \end{subfigure}%
+\end{figure}
+
+NOTE. The folder \textit{out} contains the results found using \textbf{Chuffed} with \textbf{priority\_search}
+\end{flushleft}
+
+\section*{Model with rotation}
+Since we are using CP, we can take into account the rotation simply changing the \textit{diffn} constraint with the global constraint \textbf{geost\_bb}:
+\begin{lstlisting}[basicstyle=\footnotesize]
+    constraint geost_bb(2,RECT_SIZE,RECT_OFFSET,RECT_SHAPE,VARS,KIND,[0,0],[W,H]);
+\end{lstlisting}
+
+\begin{itemize}
+    \item RECT\_SIZE contains the $\textnormal{N} \times \textnormal{M}$ and $\textnormal{M} \times \textnormal{N}$ sizes
+    \item RECT\_OFFSET contains the offset from the bottom-left point: in this case are all 0s since if we rotate the rectangle the base point is the same.
+    \item RECT\_SHAPE represent an "id" for each rectangle used:
+    \item 
+    The set of SHAPES ${1,2,3,4,5,...}$ is associated with the RECTS ${w_1 \times h_1, h_1 \times w_1, ...}$ 
+\end{itemize}
+
+In this case RECT\_SHAPE simply define a rectangle with a particular width and height and an offset from the bottom-left point but in a more general problem the shape is a combination of rectangles that define a complex shape.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics{base point.png}                
+    \caption{The red point is the offset (0,0) from the base point}
+\end{figure}    
+
+I had to insert a channeling constraint for define VARS using X and Y and redefine the boundaries of X and Y and reimplement the implicit constraint
+and also the following constants:
+
+\begin{wrapfigure}{r}{0.5\textwidth}
+    \includegraphics[scale=0.2]{5x3.1.png}
+\end{wrapfigure}  
+With the toy problem present inside \textit{model2.mzn} lead to the following solution (the last column is the shape used.):
+\begin{verbatim}
+    5 3
+    3
+    4 2 0 0 1
+    4 1 0 2 3
+    3 1 4 0 6
+\end{verbatim}
+Thus are used the rectangles:
+\begin{itemize}
+    \item 4x2 with the shape 1 which is 4x2
+    \item 4x1 with the shape 3 which is 4x1
+    \item 3x1 with the shape 6 which is 1x3
+\end{itemize}
+
+\section*{Model same size}
+In this case imposing an ordering it's easier: we have to impose an ordering on both X and Y.
+The first time I wrote:
+\begin{flushleft}
+\begin{lstlisting}[basicstyle=\footnotesize]
+    constraint forall(p,q in Presents where same_size(p,q)) 
+        (lex_less([X[p],Y[p]],[X[q],Y[q]]));
+\end{lstlisting}        
+\end{flushleft}
+%
+which leads to UNSATISFIABLE thus I had to take into account the index and imposing the ordering using the index:
+%
+\begin{flushleft}
+    \begin{lstlisting}[basicstyle=\footnotesize]
+        constraint forall(p in Presents)( 
+            let {array[int] of int: Q = [q | q in Presents where same_size(p,q)] } in 
+                forall(i in index_set(Q) where i > 1)
+                    (lex_less([X[i-1],Y[i-1]],[X[i],Y[i]])));
+    \end{lstlisting}        
+\end{flushleft}
+%
+Using this toy problem
+%
+\begin{verbatim}
+    N=6;
+    W=7;
+    H=4;
+    widths = [2,2,2,2,2,1];
+    heights = [4,2,2,2,2,4];            
+\end{verbatim}
+%
+\begin{tabular}{|c|c|}
+    Without constraint & With constraint \\
+    \hline
+    288 solutions & 16 solutions 
+\end{tabular}\newline
+%
+\newline
+which are the following:
+%
+\begin{verbatim}
+X:[0, 2, 2, 4, 4, 6] Y:[0, 0, 2, 0, 2, 0]
+X:[0, 2, 2, 4, 4, 6] Y:[0, 0, 2, 2, 0, 0]
+X:[0, 2, 2, 5, 5, 4] Y:[0, 0, 2, 0, 2, 0]
+X:[0, 2, 2, 5, 5, 4] Y:[0, 0, 2, 2, 0, 0]
+X:[0, 2, 4, 4, 2, 6] Y:[0, 0, 0, 2, 2, 0]
+X:[0, 2, 4, 4, 2, 6] Y:[0, 2, 0, 2, 0, 0]
+X:[0, 2, 5, 5, 2, 4] Y:[0, 0, 0, 2, 2, 0]
+X:[0, 2, 5, 5, 2, 4] Y:[0, 2, 0, 2, 0, 0]
+X:[0, 3, 3, 5, 5, 2] Y:[0, 0, 2, 0, 2, 0]
+X:[0, 3, 3, 5, 5, 2] Y:[0, 0, 2, 2, 0, 0]
+X:[0, 3, 5, 5, 3, 2] Y:[0, 0, 0, 2, 2, 0]
+X:[0, 3, 5, 5, 3, 2] Y:[0, 2, 0, 2, 0, 0]
+X:[1, 3, 3, 5, 5, 0] Y:[0, 0, 2, 0, 2, 0]
+X:[1, 3, 3, 5, 5, 0] Y:[0, 0, 2, 2, 0, 0]
+X:[1, 3, 5, 5, 3, 0] Y:[0, 0, 0, 2, 2, 0]
+X:[1, 3, 5, 5, 3, 0] Y:[0, 2, 0, 2, 0, 0]
+\end{verbatim}
+\end{document}
